@@ -256,6 +256,6 @@ MIT License - 自由使用、修改、分发
 
 ## 💬 反馈与支持
 
-- 🐛 [报告 Bug](https://github.com/your-username/nas-subtitle-manager/issues)
-- 💡 [功能建议](https://github.com/your-username/nas-subtitle-manager/discussions)
-- 📧 联系作者: your-email@example.com
+- 🐛 [报告 Bug](https://github.com/aexachao/nas-subtitle-manager/issues)
+- 💡 [功能建议](https://github.com/aexachao/nas-subtitle-manager/discussions)
+- 📧 联系作者: arieschao@163.com
