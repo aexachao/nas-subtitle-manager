@@ -1,5 +1,4 @@
 services:
-  # Ollama 服务
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -11,19 +10,14 @@ services:
     shm_size: 4gb
     networks:
       - subtitle-network
-    
-    # --- 修正这里 ---
-    # 物理锁核：强制绑定在 0,1,2,3 号核心
-    # 注意：这必须是顶层配置，不能放在 deploy 里
     cpuset: "0-4"
-    
-    # 算力限制：限制总算力不超过 4.0 个核（双重保险）
+    environment:
+      - TZ=Asia/Shanghai  # 添加这行
     deploy:
       resources:
         limits:
           cpus: '5.0'
 
-  # 字幕管家服务
   nas-subtitle:
     build: .
     container_name: nas-subtitle
@@ -41,10 +35,7 @@ services:
       - subtitle-network
     depends_on:
       - ollama
-      
-    # --- 修正这里 ---
     cpuset: "0-4"
-    
     deploy:
       resources:
         limits:
