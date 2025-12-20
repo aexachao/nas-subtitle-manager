@@ -528,7 +528,52 @@ def parse_srt_content(content: str) -> List[Dict]:
     return result
 
 def rebuild_srt(subs: List[Dict]) -> str:
-    return '\n'.join([f"{s['index']}\n{s['timecode']}\n{s['text']}\n" for s in subs])
+    """重建 SRT 文件 - 确保格式严格符合标准"""
+    lines = []
+    for sub in subs:
+        # 确保每个字段都存在且格式正确
+        index = str(sub.get('index', '1')).strip()
+        timecode = str(sub.get('timecode', '00:00:00,000 --> 00:00:01,000')).strip()
+        text = str(sub.get('text', '')).strip()
+        
+        # 跳过空字幕
+        if not text:
+            continue
+        
+        # 严格按照 SRT 格式：序号\n时间轴\n文本\n\n
+        lines.append(f"{index}\n{timecode}\n{text}\n")
+    
+    # 用双换行分隔每条字幕
+    return '\n'.join(lines)
+
+def save_srt_file(file_path: str, content: str, add_bom: bool = True):
+    """保存 SRT 文件 - 确保兼容性"""
+    try:
+        # 确保目录存在
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # 写入文件
+        if add_bom:
+            # 添加 BOM 提高兼容性（某些播放器需要）
+            with open(file_path, 'w', encoding='utf-8-sig') as f:
+                f.write(content)
+        else:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        
+        # 验证文件是否正确写入
+        if not Path(file_path).exists():
+            raise Exception(f"文件创建失败: {file_path}")
+        
+        file_size = Path(file_path).stat().st_size
+        if file_size == 0:
+            raise Exception(f"文件为空: {file_path}")
+        
+        print(f"[SRT] Saved: {file_path} ({file_size} bytes)")
+        return True
+    except Exception as e:
+        print(f"[SRT] Save failed: {e}")
+        return False
 
 def check_translation_quality(original_subs: List[Dict], translated_subs: List[Dict], source_lang: str) -> Tuple[int, int, float]:
     """检查翻译质量
@@ -596,15 +641,22 @@ def translate_subtitles(srt_path: str, config: AppConfig, task_id: int) -> bool:
             
             TaskDAO.update_task(task_id, log=f"正在翻译第 {batch_num}/{total_batches} 批...")
             
-            prompt = f"""你是一名资深的电影字幕翻译。请将以下字幕翻译成{target_name}。
+            # 只发送文本给 LLM，保留原序号和时间轴
+            texts_to_translate = [sub['text'] for sub in batch]
+            texts_str = '\n---\n'.join(texts_to_translate)
+            
+            prompt = f"""你是一名资深的电影字幕翻译。请将以下字幕文本翻译成{target_name}。
+
 翻译原则：
 1. 信达雅：译文要通顺、符合中文口语习惯。
 2. 意译优先：遇到俗语或梗，请转换为中文对应的表达。
 3. 简洁：字幕不宜过长。
-4. 【死命令】绝对不要修改序号和时间轴！
+4. 【重要】不要在译文末尾添加句号、逗号等标点符号！
+5. 【重要】每条字幕用 --- 分隔，保持和原文相同的数量！
+6. 【重要】只返回翻译后的文本，不要包含序号、时间轴或任何其他内容！
 
-内容如下：
-{rebuild_srt(batch)}"""
+需要翻译的文本（共 {len(texts_to_translate)} 条）：
+{texts_str}"""
             
             max_retries = 3
             batch_success = False
@@ -618,15 +670,26 @@ def translate_subtitles(srt_path: str, config: AppConfig, task_id: int) -> bool:
                         timeout=180
                     )
                     
-                    parsed = parse_srt_content(resp.choices[0].message.content.strip())
+                    # 解析翻译结果
+                    translated_texts = resp.choices[0].message.content.strip().split('---')
+                    translated_texts = [t.strip() for t in translated_texts if t.strip()]
                     
-                    if len(parsed) == len(batch):
-                        trans_subs.extend(parsed)
+                    # 验证数量是否匹配
+                    if len(translated_texts) == len(batch):
+                        # 组装字幕：使用原序号和时间轴 + 新翻译
+                        for orig_sub, trans_text in zip(batch, translated_texts):
+                            trans_text = clean_subtitle_punctuation(trans_text, config.target_language)
+                            trans_subs.append({
+                                'index': orig_sub['index'],      # 保留原序号
+                                'timecode': orig_sub['timecode'], # 保留原时间轴
+                                'text': trans_text                # 新翻译
+                            })
                         batch_success = True
                         break
                     else:
+                        # 数量不匹配，保留原文
+                        TaskDAO.update_task(task_id, log=f"⚠️ 第 {batch_num} 批翻译数量不匹配 ({len(translated_texts)}/{len(batch)})，保留原文")
                         trans_subs.extend(batch)
-                        TaskDAO.update_task(task_id, log=f"⚠️ 第 {batch_num} 批格式异常，保留原文")
                         failed_batches.append(batch_num)
                         break
                         
@@ -651,8 +714,11 @@ def translate_subtitles(srt_path: str, config: AppConfig, task_id: int) -> bool:
         
         # 保存翻译结果
         out_path = Path(srt_path).parent / f"{Path(srt_path).stem}.{config.target_language}.srt"
-        with open(out_path, 'w', encoding='utf-8') as f:
-            f.write(rebuild_srt(trans_subs))
+        srt_content = rebuild_srt(trans_subs)
+        
+        if not save_srt_file(str(out_path), srt_content, add_bom=True):
+            TaskDAO.update_task(task_id, log="字幕文件保存失败")
+            return False
         
         # 根据质量判断状态
         if success_rate >= 0.95:
