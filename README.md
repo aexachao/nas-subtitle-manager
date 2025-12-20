@@ -16,8 +16,7 @@
 ## 📸 截图预览
 
 ```
-<img width="1680" height="929" alt="image" src="https://github.com/user-attachments/assets/7b516cb8-2cee-4b39-9272-b47787dcbfbc" />
-
+![Dashboard](docs/images/dashboard.png)
 ```
 
 ## 🚀 快速开始
@@ -40,7 +39,7 @@ cd nas-subtitle-manager
 # - /your/media/path:/media  # 你的媒体库路径
 
 # 启动服务
-docker-compose up --build -d
+docker-compose up -d
 
 # 访问 Web 界面
 open http://localhost:8501
@@ -252,6 +251,6 @@ MIT License - 自由使用、修改、分发
 
 ## 💬 反馈与支持
 
-- 🐛 [报告 Bug](https://github.com/aexachao/nas-subtitle-manager/issues)
-- 💡 [功能建议](https://github.com/aexachao/nas-subtitle-manager/discussions)
-- 📧 联系作者: arieschao@163.com
+- 🐛 [报告 Bug](https://github.com/your-username/nas-subtitle-manager/issues)
+- 💡 [功能建议](https://github.com/your-username/nas-subtitle-manager/discussions)
+- 📧 联系作者: your-email@example.com
