@@ -6,25 +6,24 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**NAS 字幕管家** 是一个专为家庭 NAS 用户设计的轻量级 Web 工具。它采用 **前后端分离** 的设计理念，能够自动扫描 NAS 媒体库，利用 **Faster-Whisper** 提取视频语音生成字幕，并调用 **大语言模型 (LLM)** 将其翻译成中文。
+**NAS 字幕管家** 是一个专为家庭 NAS 用户设计的智能化字幕工具。本项目已完成 **深度代码重构**，采用 **UI 与业务逻辑分离** 的模块化架构，运行更稳定，扩展性更强。
 
-本项目已进行模块化重构，运行更稳定，维护更方便。
+它能够自动扫描 NAS 媒体库，支持 **3级子目录精确筛选**，利用 **Faster-Whisper** 提取语音，并调用 **大语言模型 (LLM)** 生成高质量的中文字幕。
 
 ---
 
 ## ✨ 核心特性
 
-*   **🎯 全流程自动化**：一键扫描媒体库 → 智能识别现有字幕 → 提取音频 → 语音转文字 → AI 翻译 → 原位保存。
-*   **🧠 智能翻译引擎**：
-    *   内置 `translator.py` 独立翻译模块。
-    *   支持 **防复读**、**格式校验**、**智能断句**。
-    *   内置“信达雅”级提示词（Prompt），告别机翻感。
-*   **🤖 多模型支持**：
-    *   **语音识别**：内置 Faster-Whisper，支持 `tiny` 到 `large-v3` 全系列模型。
-    *   **AI 翻译**：完美支持 **Ollama (本地隐私)**、**DeepSeek (高性价比)**、**Google Gemini**、**OpenAI** 等主流接口。
-*   **🎨 现代化 UI**：基于 Streamlit 构建的 **HeroUI** 风格界面，支持暗色模式，交互流畅。
-*   **📊 任务队列系统**：支持批量添加任务、后台异步处理、实时进度监控、断点重试、暂停/恢复。
-*   **🛡️ 隐私优先**：支持完全离线运行（Whisper 本地模型 + Ollama 本地 LLM），无需上传视频数据。
+* **🏗️ 模块化架构 (New)**：代码重构为 Service/UI 分层模式。`services` 层处理核心计算，`ui` 层负责交互渲染，逻辑更清晰，维护更方便。
+* **📂 精确目录扫描 (New)**：告别全盘漫长扫描！新增 **3级目录选择器**，支持精确指定扫描媒体库下的某个子目录（如 `/media/电影/2024/科幻`），只处理你关心的文件夹。
+* **🎯 全流程自动化**：一键扫描 → 智能识别缺失字幕 → 提取音频 → 语音转文字 → AI 翻译 → 原位保存。
+* **🧠 智能翻译引擎**：
+    * 内置 `translator` 服务，支持 **防复读**、**格式校验**、**智能断句**。
+    * 内置“信达雅”级 Prompt，拒绝生硬机翻。
+* **🤖 多模型支持**：
+    * **语音识别**：内置 Faster-Whisper，支持 `tiny` 到 `large-v3` 全系列模型。
+    * **AI 翻译**：完美支持 **Ollama (本地隐私)**、**DeepSeek (高性价比)**、**Google Gemini**、**OpenAI** 等主流接口。
+* **📊 任务队列系统**：支持批量添加任务、后台异步处理、实时进度监控、断点重试。
 
 ---
 
@@ -38,8 +37,6 @@
 
 ### 方案一：使用 Docker Hub 镜像 (推荐)
 
-最简单的方式，直接拉取构建好的镜像，无需下载源码。
-
 1.  在 NAS 上创建一个文件夹（例如 `nas-subtitle`）。
 2.  在该目录下创建 `docker-compose.yml` 文件：
 
@@ -48,21 +45,20 @@ version: '3.8'
 
 services:
   nas-subtitle:
-    # 直接拉取 Docker Hub 上的最新镜像
     image: aexachao/nas-subtitle-manager:latest
     container_name: nas-subtitle
     restart: unless-stopped
     ports:
       - "8501:8501"
     volumes:
-      - ./data:/data                       # 数据库和模型持久化目录 (自动生成)
-      - /volume1/video:/media              # ⚠️ 修改这里：将你的 NAS 视频路径映射到容器内的 /media
+      - ./data:/data                       # 数据库、配置和模型持久化目录
+      - /volume1/video:/media              # ⚠️ 视频根目录，映射后可在 Web 端选择具体子目录
     environment:
       - TZ=Asia/Shanghai
     extra_hosts:
       - "host.docker.internal:host-gateway" # 允许容器访问宿主机上的 Ollama
 
-  # (可选) 本地大模型服务，如果不需要本地模型可删除此段
+  # (可选) 本地大模型服务
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -83,37 +79,51 @@ docker compose up -d
 
 ### 方案二：本地源码构建
 
-如果你需要修改代码或进行二次开发，可以使用此方法。
+如果您需要二次开发，请参考最新的模块化目录结构。
 
 1.  **克隆项目**：
+    ```bash
+    git clone [https://github.com/aexachao/nas-subtitle-manager.git](https://github.com/aexachao/nas-subtitle-manager.git)
+    cd nas-subtitle-manager
+    ```
 
-```bash
-git clone https://github.com/aexachao/nas-subtitle-manager.git
-cd nas-subtitle-manager
-```
-
-2.  **配置 `docker-compose.yml`**：
-    (源码中已包含默认配置，请确保 `volumes` 映射路径正确)
-
-3.  **构建并启动**：
-
-```bash
-# --build 参数强制重新构建镜像
-docker compose up -d --build
-```
+2.  **构建并启动**：
+    ```bash
+    docker compose up -d --build
+    ```
 
 ---
 
 ## 📂 项目结构
 
+本项目采用了清晰的分层架构：
+
 ```text
 nas-subtitle-manager/
-├── app.py                 # [入口] 主应用程序 (UI渲染、数据库管理、任务调度)
-├── translator.py          # [核心] 独立翻译模块 (封装 LLM 调用、Prompt 优化、质量检测)
-├── requirements.txt       # Python 依赖清单
-├── Dockerfile             # 容器构建文件
-├── docker-compose.yml     # 容器编排配置
-└── data/                  # [自动生成] 存放 SQLite 数据库和 Whisper 模型文件
+├── app.py                   # [入口] 应用程序启动入口
+├── core/                    # [核心] 基础配置与类型定义
+│   ├── config.py            # 全局配置管理
+│   ├── models.py            # 数据模型定义
+│   └── worker.py            # 后台任务处理线程
+├── database/                # [数据层] 数据库交互
+│   ├── connection.py        # 数据库连接池
+│   ├── media_dao.py         # 媒体文件数据访问对象
+│   └── task_dao.py          # 任务队列数据访问对象
+├── services/                # [业务层] 核心逻辑实现
+│   ├── media_scanner.py     # 媒体库扫描与目录树构建
+│   ├── subtitle_converter.py# 字幕格式处理
+│   ├── translator.py        # LLM 翻译逻辑封装
+│   └── whisper_service.py   # 语音识别服务
+├── ui/                      # [表现层] 界面组件
+│   ├── components.py        # 通用 UI 组件
+│   ├── pages/               # 页面视图
+│   │   ├── media_library.py # 媒体库页面
+│   │   └── task_queue.py    # 任务队列页面
+│   ├── sidebar.py           # 侧边栏配置
+│   └── styles.py            # CSS 样式定义
+└── utils/                   # [工具] 通用工具函数
+    ├── format_utils.py      # 字符串与时间格式化
+    └── lang_detection.py    # 语言检测工具
 ```
 
 ---
@@ -122,49 +132,37 @@ nas-subtitle-manager/
 
 启动成功后，浏览器访问：`http://NAS_IP:8501`
 
-### 1. 配置 Whisper (听写)
-在左侧侧边栏 **"Whisper 设置"** 中配置：
-*   **模型大小**：推荐 `small` (速度快) 或 `medium` (精度高，需较大内存)。
-*   **计算类型**：NAS CPU 推荐使用 `int8`。
-*   **视频原声**：建议手动指定语言（如“日语”），识别率远高于自动检测。
+### 1. 媒体库扫描 (Sub-folder Scanning)
+在首页 **"媒体库"** 区域：
+* **根路径**：默认为 Docker 映射的 `/media`。
+* **目录选择**：点击下拉菜单，系统会动态加载 `/media` 下的文件夹。
+    * ✅ 支持 **3级深度** 的子文件夹浏览。
+    * 例如：你可以直接选择 `Movie > 2024 > 动作片` 进行扫描，而无需扫描整个媒体库。
+* **执行扫描**：选中目标文件夹后，点击“扫描当前目录”。
 
-### 2. 配置翻译服务 (LLM)
-在左侧侧边栏 **"翻译设置"** 中选择提供商。
+### 2. 批量任务管理
+1.  **筛选**：扫描完成后，列表展示该目录下的视频文件，勾选需要处理的文件。
+2.  **提交**：点击“添加到队列”，任务将被发送到 `core/worker.py` 进行后台处理。
+3.  **监控**：切换到 **"任务队列"** 页面查看实时日志。
 
-#### 🏠 本地模型 (Ollama) - **隐私推荐**
-1.  确保 Ollama 容器已运行。
-2.  下载推荐模型（通义千问 Qwen2.5）：
-    ```bash
-    docker exec -it ollama ollama pull qwen2.5:7b
-    ```
-3.  在网页端选择 **"Ollama (本地模型)"**，点击刷新列表选择模型。
-
-#### ☁️ 云端 API - **质量推荐**
-*   **DeepSeek**：国内首选，甚至比 GPT-4 更懂中文俚语。
-*   **Google Gemini**：`gemini-1.5-flash` 免费且速度极快。
-*   **配置**：选择厂商 -> 填入 API Key -> 点击“测试连接”。
-
-### 3. 批量任务管理
-1.  **刷新媒体库**：扫描 `/media` 下的所有视频文件。
-2.  **筛选与选择**：利用顶部的 Radio 筛选“无字幕”视频，支持全选。
-3.  **开始处理**：点击“开始处理”，任务将进入后台队列。
-4.  **监控**：在“任务队列”标签页查看实时进度。
-    *   **重试**：失败的任务可一键重试。
+### 3. 配置建议
+* **Whisper**：NAS 若无显卡，建议使用 `tiny` 或 `small` 模型 + `int8` 量化。
+* **翻译 API**：
+    * **DeepSeek**：推荐用于高性价比翻译。
+    * **Ollama**：推荐 `qwen2.5` 模型用于本地离线翻译。
 
 ---
 
 ## 🤝 常见问题 (FAQ)
 
-**Q: 为什么一直卡在“加载模型...”？**
-A: 首次运行需要下载 Whisper 模型。如果网络不通，请检查 NAS 网络设置，或手动下载模型文件放置于 `./data/models` 目录下。
+**Q: 目录选择器为什么只能看到 3 级？**
+A: 为了保证 Web 界面的响应速度，我们在 `media_scanner.py` 中限制了遍历深度。如果您的文件层级极深，建议调整 NAS 的目录挂载方式，将更深层的目录直接映射到容器的 `/media` 下。
 
-**Q: 翻译进度条不动了？**
-A: 可能是 API 超时或并发限制。程序内置了重试机制，点击任务卡片上的“重试”按钮即可。
+**Q: 之前的数据库还能用吗？**
+A: 本次重构优化了数据库结构，旧版 `data/database.db` 可能无法直接兼容。建议备份旧数据后，让程序自动生成新的数据库文件。
 
-**Q: 怎么更新到最新版本？**
-A:
-*   **Docker Hub 用户**：`docker compose pull && docker compose up -d`
-*   **源码用户**：`git pull && docker compose up -d --build`
+**Q: 如何查看报错日志？**
+A: 可以通过 `docker logs -f nas-subtitle` 查看后端详细运行日志。
 
 ---
 

@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
 # 设置工作目录
 WORKDIR /app
 
-# 安装系统依赖（包含网络调试工具）
+# 安装系统依赖
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
@@ -26,15 +26,20 @@ RUN apt-get update && apt-get install -y \
 # 复制依赖文件
 COPY requirements.txt .
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# ============================================================================
+# 【重要修复】使用多个镜像源，提高成功率
+# ============================================================================
+# 方案 1: 优先使用阿里云镜像（更稳定）
+RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
-# ============================================================================
-# 【重要修改】复制应用代码 - 包含新的翻译模块
-# ============================================================================
-COPY app.py .
-COPY translator.py .
-COPY subtitle_converter.py .
+# 如果上面失败，使用这个版本（带自动切换）：
+# RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ \
+#     || pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+#     || pip install --no-cache-dir -r requirements.txt -i https://mirrors.cloud.tencent.com/pypi/simple \
+#     || pip install --no-cache-dir -r requirements.txt
+
+# 复制所有应用代码
+COPY . .
 
 # 创建数据目录
 RUN mkdir -p /data/models
