@@ -26,17 +26,8 @@ RUN apt-get update && apt-get install -y \
 # 复制依赖文件
 COPY requirements.txt .
 
-# ============================================================================
-# 【重要修复】使用多个镜像源，提高成功率
-# ============================================================================
-# 方案 1: 优先使用阿里云镜像（更稳定）
-RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-
-# 如果上面失败，使用这个版本（带自动切换）：
-# RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ \
-#     || pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
-#     || pip install --no-cache-dir -r requirements.txt -i https://mirrors.cloud.tencent.com/pypi/simple \
-#     || pip install --no-cache-dir -r requirements.txt
+# 使用 pip 默认源安装依赖
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制所有应用代码
 COPY . .
