@@ -29,7 +29,7 @@ def render_task_queue_page():
     
     # 空状态
     if not tasks:
-        st.info("🔭 队列为空")
+        st.info("队列为空")
         return
     
     # 检查是否有处理中的任务

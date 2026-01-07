@@ -22,8 +22,9 @@ from utils.format_utils import format_file_size
 def render_media_library_page(debug_mode: bool = False):
     """渲染媒体库页面"""
     
-    # 顶部工具栏 - 3 列布局
-    col_filter, col_dir_select, col_actions = st.columns([1.5, 4, 2.5])
+    # 顶部工具栏 - 布局调整
+    # 比例: 筛选(2.2) | 空白(1.3) | 目录选择(3) | 扫描(0.8) | 开始(0.8)
+    col_filter, col_spacer, col_dir, col_scan, col_start = st.columns([2.2, 1.3, 3, 0.8, 0.8], vertical_alignment="bottom")
     
     # ========== 列 1: 筛选器 ==========
     with col_filter:
@@ -34,46 +35,41 @@ def render_media_library_page(debug_mode: bool = False):
             label_visibility="collapsed"
         )
     
-    # ========== 列 2: 目录选择器 ==========
-    with col_dir_select:
+    # ========== 列 2: 空白 ==========
+    with col_spacer:
+        st.empty()
+        
+    # ========== 列 3: 目录选择器 ==========
+    with col_dir:
         # 获取子目录列表（使用缓存）
         if 'subdirs' not in st.session_state or st.session_state.get('refresh_subdirs'):
-            with st.spinner("🔍 扫描目录结构..."):
+            with st.spinner("扫描目录结构..."):
                 st.session_state.subdirs = discover_media_subdirectories(max_depth=3)
                 st.session_state.refresh_subdirs = False
         
         subdirs = st.session_state.subdirs
         
-        # 构建分组选项
-        dir_options = _build_directory_options(subdirs)
-        
-        # 目录选择下拉框（无标签，无说明）
-        selected_index = st.selectbox(
-            "目录",
-            range(len(dir_options)),
-            format_func=lambda x: dir_options[x]['display'],
-            index=0,
-            key="selected_directory",
-            label_visibility="collapsed"  # 隐藏标签
+        # 目录多选框
+        selected_dirs = st.multiselect(
+            "选择目录",
+            subdirs,
+            placeholder="选择一个或多个目录 (留空显示全部)",
+            label_visibility="collapsed"
         )
+
+    # ========== 列 4: 扫描按钮 ==========
+    with col_scan:
+        # 刷新按钮（去掉 emoji）
+        if not selected_dirs:
+            refresh_text = "扫描全部"
+        else:
+            refresh_text = f"扫描 ({len(selected_dirs)})"
         
-        # 获取实际选中的目录路径
-        selected_dir = dir_options[selected_index]['path']
-    
-    # ========== 列 3: 操作按钮 ==========
-    with col_actions:
-        col_refresh, col_start = st.columns([1, 1])
-        
-        with col_refresh:
-            # 刷新按钮（去掉 emoji）
-            if selected_dir is None:
-                refresh_text = "刷新全部"
-            else:
-                refresh_text = "扫描"
+        if st.button(refresh_text, use_container_width=True):
+            _perform_scan(selected_dirs, debug_mode)
             
-            if st.button(refresh_text, use_container_width=True):
-                _perform_scan(selected_dir, debug_mode)
-        
+    # ========== 列 5: 开始按钮 ==========
+    with col_start:
         # 加载媒体文件
         filter_map = {
             "全部": None,
@@ -84,42 +80,48 @@ def render_media_library_page(debug_mode: bool = False):
         files = MediaDAO.get_media_files_filtered(filter_map[filter_type])
         
         # 如果选择了子目录，进一步过滤
-        if selected_dir:
-            files = [f for f in files if selected_dir in f.file_path]
+        if selected_dirs:
+            # 只要文件路径包含任意一个被选中的目录路径即可
+            filtered_files = []
+            for f in files:
+                for d in selected_dirs:
+                    if d in f.file_path:
+                        filtered_files.append(f)
+                        break
+            files = filtered_files
         
         # 统计选中文件
         selected_count = sum(
             1 for f in files if st.session_state.get(f"s_{f.id}", False)
         )
         
-        with col_start:
-            # 开始处理按钮（去掉 emoji）
-            if selected_count > 0:
-                btn_text = f"处理 ({selected_count})"
-                btn_disabled = False
-            else:
-                btn_text = "开始处理"
-                btn_disabled = True
-            
-            if st.button(
-                btn_text,
-                type="primary",
-                use_container_width=True,
-                disabled=btn_disabled
-            ):
-                _add_tasks_for_selected_files(files)
+        # 开始处理按钮（去掉 emoji）
+        if selected_count > 0:
+            btn_text = f"处理 ({selected_count})"
+            btn_disabled = False
+        else:
+            btn_text = "开始处理"
+            btn_disabled = True
+        
+        if st.button(
+            btn_text,
+            type="primary",
+            use_container_width=True,
+            disabled=btn_disabled
+        ):
+            _add_tasks_for_selected_files(files)
     
     # ========== 显示统计信息 ==========
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    _render_statistics(len(files), selected_count, selected_dir, filter_type)
+    _render_statistics(len(files), selected_count, selected_dirs, filter_type)
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     
     # ========== 空状态 ==========
     if not files:
-        if selected_dir:
-            st.info(f"🔭 该目录下暂无{filter_type}文件")
+        if selected_dirs:
+            st.info(f"选中目录下暂无{filter_type}文件")
         else:
-            st.info("🔭 暂无文件，请先扫描媒体库")
+            st.info("暂无文件，请先扫描媒体库")
         return
     
     # ========== 全选功能 ==========
@@ -137,73 +139,24 @@ def render_media_library_page(debug_mode: bool = False):
         _render_media_card(f)
 
 
-def _build_directory_options(subdirs: list) -> list:
-    """
-    构建层级化的目录选项
-    
-    Args:
-        subdirs: 子目录列表
-    
-    Returns:
-        选项列表，每项包含 display 和 path
-    """
-    options = [{'display': '📁 全部目录', 'path': None}]
-    
-    if not subdirs:
-        return options
-    
-    # 按层级和名称排序
-    sorted_dirs = sorted(subdirs, key=lambda x: (x.count('/') + x.count('\\'), x.lower()))
-    
-    # 分组显示
-    current_depth = -1
-    
-    for d in sorted_dirs:
-        depth = d.count('/') + d.count('\\')
-        
-        # 如果深度变化，添加分隔提示
-        if depth != current_depth and depth > 0:
-            current_depth = depth
-            if depth == 1:
-                options.append({'display': '─────── 📂 二级目录 ───────', 'path': None, 'disabled': True})
-            elif depth == 2:
-                options.append({'display': '─────── 📁 三级目录 ───────', 'path': None, 'disabled': True})
-        
-        # 获取目录名
-        dir_name = d.split('/')[-1] if '/' in d else d.split('\\')[-1] if '\\' in d else d
-        
-        # 根据深度设置缩进和图标
-        if depth == 0:
-            display = f"📂 {dir_name}"
-        elif depth == 1:
-            display = f"　├─ 📁 {dir_name}"
-        elif depth == 2:
-            display = f"　　├─ 📄 {dir_name}"
-        else:
-            display = f"{'　' * depth}└─ 📄 {dir_name}"
-        
-        # 添加完整路径提示（鼠标悬停时显示）
-        if depth > 0:
-            display += f"  ({d})"
-        
-        options.append({'display': display, 'path': d})
-    
-    return options
-
-
-def _render_statistics(total: int, selected: int, current_dir: Optional[str], filter_type: str):
+def _render_statistics(total: int, selected: int, selected_dirs: list, filter_type: str):
     """渲染统计信息栏"""
     info_parts = []
     
-    if current_dir:
-        # 显示当前目录（最多显示 40 字符）
-        display_path = current_dir if len(current_dir) <= 40 else "..." + current_dir[-37:]
-        info_parts.append(f"📂 `{display_path}`")
+    if selected_dirs:
+        if len(selected_dirs) == 1:
+            d = selected_dirs[0]
+            display = d if len(d) <= 30 else "..." + d[-27:]
+            info_parts.append(f"`{display}`")
+        else:
+            info_parts.append(f"已选 {len(selected_dirs)} 个目录")
+    else:
+        info_parts.append("全部目录")
     
-    info_parts.append(f"📊 {filter_type}: **{total}** 个文件")
+    info_parts.append(f"{filter_type}: **{total}** 个文件")
     
     if selected > 0:
-        info_parts.append(f"✅ 已选: **{selected}** 个")
+        info_parts.append(f"已选: **{selected}** 个")
     
     st.caption(" | ".join(info_parts))
 
@@ -223,32 +176,39 @@ def _add_tasks_for_selected_files(files: list):
     
     # 显示结果
     if failed_files:
-        st.warning(f"✅ 已添加 {success_count} 个任务，❌ {len(failed_files)} 个失败")
+        st.warning(f"已添加 {success_count} 个任务， {len(failed_files)} 个失败")
         for fname, reason in failed_files[:3]:
-            st.caption(f"❌ {fname}: {reason}")
+            st.caption(f"{fname}: {reason}")
     else:
-        st.toast(f"✅ 已添加 {success_count} 个任务")
+        st.toast(f"已添加 {success_count} 个任务")
     
     time.sleep(1)
     st.rerun()
 
 
-def _perform_scan(subdirectory: Optional[str], debug_mode: bool):
+def _perform_scan(subdirectories: list, debug_mode: bool):
     """执行扫描操作"""
-    with st.spinner("🔍 扫描中..."):
-        cnt, logs = scan_media_directory(
-            subdirectory=subdirectory,
-            debug=debug_mode
-        )
+    with st.spinner("扫描中..."):
+        total_cnt = 0
+        all_logs = []
         
-        if subdirectory:
-            st.toast(f"✅ {subdirectory}: 更新 {cnt} 个文件")
-        else:
-            st.toast(f"✅ 更新 {cnt} 个文件")
+        # 如果未选择子目录，则扫描根目录
+        dirs_to_scan = subdirectories if subdirectories else [None]
         
-        if debug_mode and logs:
-            with st.expander("📋 调试日志", expanded=True):
-                for log in logs[:20]:
+        for d in dirs_to_scan:
+            cnt, logs = scan_media_directory(
+                subdirectory=d,
+                debug=debug_mode
+            )
+            total_cnt += cnt
+            if logs:
+                all_logs.extend(logs)
+        
+        st.toast(f"扫描完成，更新 {total_cnt} 个文件")
+        
+        if debug_mode and all_logs:
+            with st.expander("调试日志", expanded=True):
+                for log in all_logs[:20]:
                     st.text(log)
     
     # 刷新目录列表
@@ -287,7 +247,7 @@ def _render_media_card(media_file):
             f"""
             <div class="hero-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <div style="font-weight:600; font-size:15px; color:#f4f4f5; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
+                    <div style="font-weight:600; font-size:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
                         {media_file.file_name}
                     </div>
                     <div style="font-size:12px; color:#71717a; min-width:60px; text-align:right;">
