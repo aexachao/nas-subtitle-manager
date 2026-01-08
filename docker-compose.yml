@@ -20,7 +20,7 @@ services:
 
   nas-subtitle:
     build: .
-    container_name: nas-subtitle
+    container_name: nas-submaster
     restart: unless-stopped
     ports:
       - "8501:8501"
