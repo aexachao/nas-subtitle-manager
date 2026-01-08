@@ -15,7 +15,7 @@ NAS SubMaster (NAS 字幕管家)
 <!-- 移除了 <br> 标签，让徽章紧贴着说明文字 -->
 [![Docker Pulls](https://img.shields.io/docker/pulls/aexachao/nas-subtitle-manager.svg?logo=docker&label=Docker%20Pulls)](https://hub.docker.com/r/aexachao/nas-subtitle-manager)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
 <hr>
 
@@ -188,7 +188,7 @@ A: 可以通过 `docker logs -f nas-subtitle` 查看后端详细运行日志。
 
 ## 📄 开源协议
 
-本项目采用 [AGPL-3,0](LICENSE) 协议开源。
+本项目采用 [AGPL-3.0](LICENSE) 协议开源。
 
 **简单来说**：你可以自由使用、修改和商用本项目，但如果你把它做成网站或服务给别人用，需要公开你的源代码。
 
